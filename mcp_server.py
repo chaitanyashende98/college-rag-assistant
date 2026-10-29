@@ -58,25 +58,29 @@ if __name__ == "__main__":
             "MCP_AUTH_TOKEN must be configured before starting the server."
         )
 
+        from starlette.middleware.base import BaseHTTPMiddleware
+
     app = mcp.streamable_http_app()
 
-    @app.middleware("http")
-    async def require_bearer_token(request, call_next):
-        authorization = request.headers.get("authorization", "")
-        scheme, separator, supplied_token = authorization.partition(" ")
+    class BearerTokenMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            authorization = request.headers.get("authorization", "")
+            scheme, separator, supplied_token = authorization.partition(" ")
 
-        if (
-            scheme.lower() != "bearer"
-            or not separator
-            or not hmac.compare_digest(supplied_token, expected_token)
-        ):
-            return JSONResponse(
-                {"error": "Authentication required"},
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            if (
+                scheme.lower() != "bearer"
+                or not separator
+                or not hmac.compare_digest(supplied_token, expected_token)
+            ):
+                return JSONResponse(
+                    {"error": "Authentication required"},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
-        return await call_next(request)
+            return await call_next(request)
+
+    app.add_middleware(BearerTokenMiddleware)
 
     uvicorn.run(
         app,
